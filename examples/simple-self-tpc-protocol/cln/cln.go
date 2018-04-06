@@ -133,7 +133,7 @@ func sendOneModelPacket(conn net.Conn, clnAddr string) error {
 		return ErrClientWrongResp
 	}
 
-	log.Printf("client - %v: send one model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
+	//log.Printf("client - %v: send one model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
 
 	return nil
 }
@@ -169,7 +169,7 @@ func sendJSONModelPacket(conn net.Conn, clnAddr string) error {
 	// full packet bytes
 	packBytes := append(headBytes, dataBytes...)
 
-	log.Printf("client - %v: send json model: send pack - %v", clnAddr, packBytes)
+	//log.Printf("client - %v: send json model: send pack - %v", clnAddr, packBytes)
 
 	// send one model
 	n, err := conn.Write(packBytes)
@@ -199,7 +199,7 @@ func sendJSONModelPacket(conn net.Conn, clnAddr string) error {
 		return ErrClientWrongResp
 	}
 
-	log.Printf("client - %v: send json model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
+	//log.Printf("client - %v: send json model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
 
 	return nil
 }
