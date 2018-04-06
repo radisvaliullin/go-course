@@ -14,7 +14,8 @@ type OneModel struct {
 
 // JSONModel - for serialize to JSON
 type JSONModel struct {
-	Name string
+	// u can skip strugtag (json) if name equal
+	Name string `json:"name"`
 }
 
 // protocol models
