@@ -1,10 +1,15 @@
 package main
 
 import (
-	"errors"
+	"bytes"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net"
-	"time"
+
+	"github.com/radisvaliullin/go-course/examples/simple-self-tpc-protocol/models"
 )
 
 func main() {
@@ -31,35 +36,76 @@ func main() {
 func connHandler(conn net.Conn) {
 	defer conn.Close()
 
-	// read request
-	buff := make([]byte, 1024)
+	clnAddr := fmt.Sprint(conn.RemoteAddr())
 
-	n, err := conn.Read(buff)
-	if err != nil {
-		log.Printf("srv: conn - %v; err - %v; buff - %v",
-			conn.RemoteAddr(), err, string(buff[:n]))
-		return
+	for {
+		// read packet header
+		h := models.Header{}
+		err := h.Read(conn)
+		if err != nil {
+			log.Printf("srv: client - %v; header read err - %v", clnAddr, err)
+			return
+		}
+
+		// read packet data bytes
+		dataBytes := make([]byte, int(h.Len))
+		// not reason to check n
+		_, err = io.ReadFull(conn, dataBytes)
+		if err != nil {
+			log.Printf("srv: client - %v; read packet data bytes, err - %v", clnAddr, err)
+			return
+		}
+
+		// parse read data
+		err = parseData(h, dataBytes, clnAddr)
+		if err != nil {
+			log.Printf("srv: client - %v; packet data parse, err - %v", clnAddr, err)
+			return
+		}
+
+		// resp packet
+		hB, err := h.ToBytes()
+		if err != nil {
+			log.Printf("srv: client - %v; get response packet, err - %v", clnAddr, err)
+			return
+		}
+
+		// send resp packet
+		_, err = conn.Write(hB)
+		if err != nil {
+			log.Printf("srv: client - %v; write response packet, err - %v", clnAddr, err)
+			return
+		}
+
+		log.Printf(
+			"srv: client - %v: req/res: read pack: head - %v; req data - %v",
+			clnAddr, hB, dataBytes)
+
 	}
-	log.Printf("srv: conn - %v; msg - \n%v\n", conn.RemoteAddr(), string(buff[:n]))
+}
 
-	// send response
-	rawResp := "HTTP/1.1 200 OK\r\n" +
-		"Content-Length: 6\r\n" +
-		"Content-Type: text/plain; charset=utf-8\r\n" +
-		"Date: Wed, 19 Jul 1972 19:00:00 GMT\r\n\r\n" +
-		"Hello.\n"
-	resp := []byte(rawResp)
+func parseData(h models.Header, data []byte, clnAddr string) error {
 
-	// write response
-	n, err = conn.Write(resp)
-	if err != nil {
-		log.Printf("srv: conn - %v; write resp err - %v", conn.RemoteAddr(), err)
-		return
-	} else if n != len(resp) {
-		log.Printf("srv: conn - %v; write resp err - %v",
-			conn.RemoteAddr(), errors.New("write resp n != len(writeData)"))
+	if h.Type == 0 {
+		om := models.OneModel{}
+		err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &om)
+		if err != nil {
+			log.Printf("srv: client - %v; packet data parse, type - %v, err - %v", clnAddr, h.Type, err)
+			return err
+		}
+
+		log.Printf("srv: client - %v; get packet, type - %v, body - %+v", clnAddr, h.Type, om)
+
+	} else if h.Type == 1 {
+		jm := models.JSONModel{}
+		err := json.Unmarshal(data, &jm)
+		if err != nil {
+			log.Printf("srv: client - %v; packet data parse, type - %v, err - %v", clnAddr, h.Type, err)
+			return err
+		}
+
+		log.Printf("srv: client - %v; get packet, type - %v, body - %+v", clnAddr, h.Type, jm)
+
 	}
-	log.Printf("srv: conn - %v; write ok", conn.RemoteAddr())
-
-	time.Sleep(time.Second * 2)
+	return nil
 }

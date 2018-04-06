@@ -5,10 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/radisvaliullin/go-course/examples/simple-self-tpc-protocol/models"
@@ -23,28 +23,38 @@ var (
 
 func main() {
 
+	for i := 0; i < 10; i++ {
+		go client()
+	}
+
+	for {
+		log.Printf("heartbit")
+		time.Sleep(time.Second * 1)
+	}
 }
 
 //
-func client(port int) {
+func client() {
 
-	addr := ":" + strconv.Itoa(port)
+	srvAddr := "localhost:7373"
 
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.Dial("tcp", srvAddr)
 	if err != nil {
-		log.Printf("client - %v, dial err - %v", addr, err)
+		log.Printf("client - %v, dial err - %v", srvAddr, err)
 		return
 	}
 	defer conn.Close()
+
+	clnAddr := fmt.Sprint(conn.LocalAddr())
 
 	for {
 
 		// send first packet
 		// send one model
 		// not need goroutine
-		err := sendOneModelPacket(conn)
+		err := sendOneModelPacket(conn, clnAddr)
 		if err != nil {
-			log.Printf("client - %v: send one model packet err - %v", addr, err)
+			log.Printf("client - %v: send one model packet err - %v", clnAddr, err)
 			return
 		}
 
@@ -54,9 +64,9 @@ func client(port int) {
 		// send second type packet
 		// send json model
 		// not need goroutine
-		err = sendJSONModelPacket(conn)
+		err = sendJSONModelPacket(conn, clnAddr)
 		if err != nil {
-			log.Printf("client - %v: send json model packet err - %v", addr, err)
+			log.Printf("client - %v: send json model packet err - %v", clnAddr, err)
 			return
 		}
 
@@ -66,7 +76,7 @@ func client(port int) {
 }
 
 //
-func sendOneModelPacket(conn net.Conn) error {
+func sendOneModelPacket(conn net.Conn, clnAddr string) error {
 
 	// packet data
 	om := models.OneModel{
@@ -88,7 +98,7 @@ func sendOneModelPacket(conn net.Conn) error {
 	}
 	headBytes, err := h.ToBytes()
 	if err != nil {
-		log.Printf("client: get head bytes err %v", err)
+		log.Printf("client - %v: get head bytes err %v", clnAddr, err)
 		return err
 	}
 
@@ -98,10 +108,10 @@ func sendOneModelPacket(conn net.Conn) error {
 	// send one model
 	n, err := conn.Write(packBytes)
 	if err != nil {
-		log.Printf("client: send packet bytes err - %v", err)
+		log.Printf("client - %v: send packet bytes err - %v", clnAddr, err)
 		return err
 	} else if n != len(packBytes) {
-		log.Printf("client: send packet bytes err - %v", "send bytes len not equal return n")
+		log.Printf("client - %v: send packet bytes err - %v", clnAddr, "send bytes len not equal return n")
 		return ErrClientWRLen
 	}
 
@@ -113,7 +123,7 @@ func sendOneModelPacket(conn net.Conn) error {
 	// n, err := conn.Read(resBytes)
 	_, err = io.ReadFull(conn, resBytes)
 	if err != nil {
-		log.Printf("client: read response err - %v", err)
+		log.Printf("client - %v: read response err - %v", clnAddr, err)
 		return err
 	}
 
@@ -123,11 +133,13 @@ func sendOneModelPacket(conn net.Conn) error {
 		return ErrClientWrongResp
 	}
 
+	log.Printf("client - %v: send one model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
+
 	return nil
 }
 
 //
-func sendJSONModelPacket(conn net.Conn) error {
+func sendJSONModelPacket(conn net.Conn, clnAddr string) error {
 
 	// packet data
 	om := models.JSONModel{
@@ -138,7 +150,7 @@ func sendJSONModelPacket(conn net.Conn) error {
 	// marshal to json
 	dataBytes, err := json.Marshal(&om)
 	if err != nil {
-		log.Printf("client: get packet data bytes, err - %v", err)
+		log.Printf("client - %v: get packet data bytes, err - %v", clnAddr, err)
 		return err
 	}
 
@@ -150,20 +162,22 @@ func sendJSONModelPacket(conn net.Conn) error {
 	}
 	headBytes, err := h.ToBytes()
 	if err != nil {
-		log.Printf("client: get head bytes err %v", err)
+		log.Printf("client - %v: get head bytes err %v", clnAddr, err)
 		return err
 	}
 
 	// full packet bytes
 	packBytes := append(headBytes, dataBytes...)
 
+	log.Printf("client - %v: send json model: send pack - %v", clnAddr, packBytes)
+
 	// send one model
 	n, err := conn.Write(packBytes)
 	if err != nil {
-		log.Printf("client: send packet bytes err - %v", err)
+		log.Printf("client - %v: send packet bytes err - %v", clnAddr, err)
 		return err
 	} else if n != len(packBytes) {
-		log.Printf("client: send packet bytes err - %v", "send bytes len not equal return n")
+		log.Printf("client - %v: send packet bytes err - %v", clnAddr, "send bytes len not equal return n")
 		return ErrClientWRLen
 	}
 
@@ -175,7 +189,7 @@ func sendJSONModelPacket(conn net.Conn) error {
 	// n, err := conn.Read(resBytes)
 	_, err = io.ReadFull(conn, resBytes)
 	if err != nil {
-		log.Printf("client: read response err - %v", err)
+		log.Printf("client - %v: json model: read response err - %v", clnAddr, err)
 		return err
 	}
 
@@ -184,6 +198,8 @@ func sendJSONModelPacket(conn net.Conn) error {
 	if bytes.Compare(headBytes, resBytes) != 0 {
 		return ErrClientWrongResp
 	}
+
+	log.Printf("client - %v: send json model: send pack - %v; resp - %v", clnAddr, packBytes, resBytes)
 
 	return nil
 }
